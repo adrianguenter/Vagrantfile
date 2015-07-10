@@ -1,0 +1,7 @@
+.idea/
+.image/
+.junk/
+.public/
+.vagrant/
+.vagrant.conf.d/**
+!.vagrant.conf.d/*.example
