@@ -5,4 +5,4 @@
 # Ignore config and runtime data dirs & files except example files
 /Vagrantfile.d/**/**
 !/Vagrantfile.d/**/
-!Vagrantfile.d/**/*.example
+!/Vagrantfile.d/**/*.example
