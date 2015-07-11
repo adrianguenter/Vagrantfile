@@ -1,11 +1,9 @@
 #!/usr/bin/env ruby
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
-require 'singleton'
 require 'ostruct'
 require 'securerandom'
 require 'yaml'
-require 'erb'
 require 'optparse'
 # — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — —
 # Lib »»»
@@ -51,7 +49,8 @@ class << VAGRANTFILE
 
     unless Object.const_defined?('Vagrant')
       # TODO command-line stuff here
-      puts 'COMMAND LINE'
+      puts '—— CLI ——'
+      cli = CommandLineHelper.new
       exit
     end
 
@@ -178,6 +177,10 @@ class << VAGRANTFILE
     end
 
     private :_load_file
+  end
+
+  class CommandLineHelper
+
   end
 end
 # ««« Vagrantfile
