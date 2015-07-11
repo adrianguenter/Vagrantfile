@@ -1,11 +1,8 @@
-/.idea/
-/.image/
-/.junk/
-/.public/
-/.vagrant/
+# Ignore all dotdirs & dotfiles except this one by default
+/.*
+!.gitignore
 
+# Ignore config and runtime data dirs & files except example files
 /Vagrantfile.d/**/**
 !/Vagrantfile.d/**/
 !Vagrantfile.d/**/*.example
-
-!.gitignore
