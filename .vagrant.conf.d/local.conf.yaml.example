@@ -1,4 +1,0 @@
----
-:nsupdate:
-  :enabled:      true
-  :keyfile_path: ~/MyPrivateTSIG.key
