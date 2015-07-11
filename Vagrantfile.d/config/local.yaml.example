@@ -1,4 +1,5 @@
+# local.yaml.example
 ---
-:nsupdate:
-  :enabled:      true
-  :keyfile_path: /path/to/MyPrivateTSIG.key
+nsupdate:
+  enabled:      true
+  keyfile_path: /path/to/MyPrivateTSIG.key
