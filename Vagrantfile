@@ -1,16 +1,14 @@
 #!/usr/bin/env ruby
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
-# »»»
 require 'singleton'
 require 'ostruct'
 require 'securerandom'
 require 'yaml'
 require 'erb'
 require 'optparse'
-# «««
-# ——— Lib ———
-# »»»
+# — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — —
+# Lib »»»
 class Object
   # @return [Boolean]
   #
@@ -19,16 +17,30 @@ class Object
   def filter_boolean_value(default=false)
     [true, false].include?(self) ? self : default
   end
+
+  # https://gist.github.com/Integralist/9503099
+  def deep_symbolize_keys
+    return self.reduce({}) do |memo, (k, v)|
+      memo.tap { |m| m[k.to_sym] = v.deep_symbolize_keys }
+    end if self.is_a? Hash
+
+    return self.reduce([]) do |memo, v|
+      memo << v.deep_symbolize_keys; memo
+    end if self.is_a? Array
+
+    self
+  end
 end
-# «««
-# ——— Vagrantfile ———
-# »»»
-Vagrantfile = Object.new
-class << Vagrantfile
-  API_VERSION     = '2'
-  VAGRANT_VERSION = '>= 1.7.0'
-  PATH            = __FILE__
-  DATA_PATH       = ENV['VFD_PATH'] ||= "#{__dir__}/Vagrantfile.d"
+# ««« Lib
+# — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — —
+# Vagrantfile »»»
+VAGRANTFILE = Object.new
+class << VAGRANTFILE
+  API_VERSION      = '2'
+  VAGRANT_VERSION  = '>= 1.7.0'
+  PATH             = __FILE__
+  DATA_PATH        = ENV['VFD_PATH'] ||= "#{__dir__}/Vagrantfile.d"
+  REQUIRED_PLUGINS = %w(vagrant-triggers vagrant-guestip)
 
   @config
   @instance_id
@@ -46,8 +58,8 @@ class << Vagrantfile
     @instance_id = "#{@config.ENV[:name]}-#{SecureRandom.hex(3)}"
 
     Vagrant.require_version VAGRANT_VERSION
-    # TODO Merge in user definable (options.conf.yaml?) plugins here?
-    %w(vagrant-triggers).each do |plugin|
+    # TODO Merge in user definable (options.yaml?) plugins here?
+    REQUIRED_PLUGINS.each do |plugin|
       abort("Missing plugin, please run: vagrant plugin install #{plugin}") unless Vagrant.has_plugin? plugin
     end
     ENV['VAGRANT_DEFAULT_PROVIDER'] ||= 'docker'
@@ -61,7 +73,7 @@ class << Vagrantfile
         config.vm.define bname, primary: bcfg[:is_primary] do |b|
           # TODO? Provisioners
 
-          # Providers
+          # Providers (first in config is default)
           bcfg[:providers].each do |pname, pcfg|
             b.vm.provider pname do |p|
               case pname
@@ -94,66 +106,40 @@ class << Vagrantfile
         end
       end
 
-      config.trigger.before [:up, :reload] do
-        #
-      end
-
       config.trigger.after [:up, :reload] do
+        vfconfig  = Vagrantfile.config
+        nsupdate  = vfconfig.LOCAL[:nsupdate]
+        box       = vfconfig.ENV[:boxes][@machine.name]
+        public_ip = @machine.provider.capability(:public_addressa)
 
-        puts @machine.name.inspect
-        puts @machine.provider.inspect
-        puts @machine.provider_config.inspect
-        puts @machine.provider_name.inspect
-        puts @machine.provider_options.inspect
-        puts @machine.ui.inspect
-        puts @machine.vagrantfile.inspect
+        if nsupdate[:enabled] and public_ip
+          cmds = "( echo 'server localhost';"; box[:nsupdate_domains].each do |domain|
+            cmds << "echo 'update delete #{domain}. IN A'; echo 'update add #{domain}. 3600 IN A #{public_ip}';"
+          end; cmds << "echo 'send' ) | nsupdate -D -k '#{nsupdate[:keyfile_path]}' 2>&1"
 
-        exit
-        vfconfig = Vagrantfile.config
-        boxes = vfconfig.ENV[:boxes]
-        ips   = {}
-
-        # Grab IP address for all Docker container boxes
-        boxes.select { |bname, bcfg| bcfg[:providers].key?(:docker) }.each do |bname, bcfg|
-          # TODO Write this to box props not config
-          ip = `docker inspect --format '{{ .NetworkSettings.IPAddress }}' #{bcfg[:providers][:docker][:name]}`.strip
-          next if ip.empty?
-          puts "#{bname}: #{ip}"
-          ips[bname] = ip
+          # TODO: Error handling
+          # https://github.com/emyl/vagrant-triggers/blob/master/lib/vagrant-triggers/dsl.rb
+          # @logger...
+          # error...
+          puts `#{cmds}`.split(/\n+/).select { |l| l =~ /opcode: UPDATE|(IN|ANY)\s+(?!(SOA|NS))[A-Z]+|could not/ }
         end
-
-        # read from "docker logs" here to get DB credentials into wp-config.php?
-
-        if vfconfig.LOCAL[:nsupdate][:enabled]
-          boxes.keys.select { |bname| ips.include?(bname) }.each do |bname|
-            cmds = "( echo 'server localhost';"
-            boxes[bname][:nsupdate_domains].each do |domain|
-              cmds << "echo 'update delete #{domain}. IN A'; echo 'update add #{domain}. 3600 IN A #{ips[bname]}';"
-            end
-            cmds << "echo 'send' ) | nsupdate -D -k '#{vfconfig.LOCAL[:nsupdate][:keyfile_path]}' 2>&1"
-            puts cmds
-            puts `#{cmds}`.split(/\n+/).select { |l| l =~ /opcode: UPDATE|(IN|ANY)\s+(?!(SOA|NS))[A-Z]+|could not/ }
-          end
-        end
-
-        puts boxes
       end
     end
   end
 
   def _load_config
-    @config = ConfigLoader.new(
+    @config = ConfigHelper.new(
         {
-            :OPTIONS => "#{DATA_PATH}/config/options.conf.yaml",
-            :ENV     => "#{DATA_PATH}/config/env.conf.yaml",
-            :LOCAL   => "#{DATA_PATH}/config/local.conf.yaml"
+            :OPTIONS => "#{DATA_PATH}/config/options.yaml",
+            :ENV     => "#{DATA_PATH}/config/env.yaml",
+            :LOCAL   => "#{DATA_PATH}/config/local.yaml"
         }
     ).load
   end
 
   private :_load_config
 
-  class ConfigLoader
+  class ConfigHelper
     class Config < Object
     end
 
@@ -166,10 +152,10 @@ class << Vagrantfile
 
     def get(namespace=false, autoload=true)
       if namespace
-        load namespace unless defined? @config[namespace] or not autoload
+        load namespace if autoload and not defined? @config[namespace]
         return @config[namespace]
       end
-      load unless empty?(@files.keys - @config.instance_variables) or not autoload
+      load if autoload and @config.instance_variables.empty?
       @config
     end
 
@@ -183,20 +169,19 @@ class << Vagrantfile
         return file_data
       end
 
-      @files.each_key do |key|
-        load(key)
-      end
+      @files.each_key { |key| load key }
       @config
     end
 
     def _load_file(path)
-      OpenStruct.new YAML.load_file(path)
+      OpenStruct.new YAML.load_file(path).deep_symbolize_keys
     end
 
     private :_load_file
   end
 end
-# «««
-# ——— Init ———
-# »»»
-Vagrantfile.do
+# ««« Vagrantfile
+# — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — —
+# Init »»»
+VAGRANTFILE.do
+# ««« Init
