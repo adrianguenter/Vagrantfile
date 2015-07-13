@@ -5,7 +5,7 @@ require 'ostruct'
 require 'securerandom'
 require 'yaml'
 require 'optparse'
-# — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — —
+# — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — —
 # Lib »»»
 class Object
   # @return [Boolean]
@@ -30,7 +30,7 @@ class Object
   end
 end
 # ««« Lib
-# — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — —
+# — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — —
 # Vagrantfile »»»
 VAGRANTFILE = Object.new
 class << VAGRANTFILE
@@ -59,7 +59,8 @@ class << VAGRANTFILE
     Vagrant.require_version VAGRANT_VERSION
     # TODO Merge in user definable (options.yaml?) plugins here?
     REQUIRED_PLUGINS.each do |plugin|
-      abort("Missing plugin, please run: vagrant plugin install #{plugin}") unless Vagrant.has_plugin? plugin
+      abort("Missing plugin, please run: "\
+          "vagrant plugin install #{plugin}") unless Vagrant.has_plugin? plugin
     end
     ENV['VAGRANT_DEFAULT_PROVIDER'] ||= 'docker'
 
@@ -106,21 +107,25 @@ class << VAGRANTFILE
       end
 
       config.trigger.after [:up, :reload] do
-        vfconfig  = Vagrantfile.config
+        vfconfig  = VAGRANTFILE.config
         nsupdate  = vfconfig.LOCAL[:nsupdate]
         box       = vfconfig.ENV[:boxes][@machine.name]
-        public_ip = @machine.provider.capability(:public_addressa)
+        public_ip = @machine.provider.capability(:public_address)
 
-        if nsupdate[:enabled] and public_ip
+        if nsupdate[:enabled] && public_ip
           cmds = "( echo 'server localhost';"; box[:nsupdate_domains].each do |domain|
-            cmds << "echo 'update delete #{domain}. IN A'; echo 'update add #{domain}. 3600 IN A #{public_ip}';"
+            cmds << "echo 'update delete #{domain}. IN A'; "\
+                "echo 'update add #{domain}. 3600 IN A #{public_ip}';"
           end; cmds << "echo 'send' ) | nsupdate -D -k '#{nsupdate[:keyfile_path]}' 2>&1"
 
           # TODO: Error handling
           # https://github.com/emyl/vagrant-triggers/blob/master/lib/vagrant-triggers/dsl.rb
           # @logger...
           # error...
-          puts `#{cmds}`.split(/\n+/).select { |l| l =~ /opcode: UPDATE|(IN|ANY)\s+(?!(SOA|NS))[A-Z]+|could not/ }
+          puts `#{cmds}`.split(/\n+/).select do |l|
+              l =~ /opcode: UPDATE|(IN|ANY)\s+(?!(SOA|NS))[A-Z]+|could not/
+            end
+          end
         end
       end
     end
@@ -149,16 +154,16 @@ class << VAGRANTFILE
 
     attr_accessor :files
 
-    def get(namespace=false, autoload=true)
+    def get(namespace = nil, autoload: true)
       if namespace
-        load namespace if autoload and not defined? @config[namespace]
+        load namespace if autoload && !defined? @config[namespace] # < FIXME? Does this do what we want?
         return @config[namespace]
       end
-      load if autoload and @config.instance_variables.empty?
+      load if autoload && @config.instance_variables.empty?
       @config
     end
 
-    def load(namespace=false)
+    def load(namespace = nil)
       if namespace
         unless @config.instance_variable_defined?("@#{namespace}")
           @config.class.class_eval { attr_reader namespace.to_sym }
@@ -184,7 +189,7 @@ class << VAGRANTFILE
   end
 end
 # ««« Vagrantfile
-# — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — —
+# — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — —
 # Init »»»
 VAGRANTFILE.do
 # ««« Init
