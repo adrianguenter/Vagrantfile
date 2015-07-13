@@ -145,10 +145,7 @@ class << VAGRANTFILE
           # https://github.com/emyl/vagrant-triggers/blob/master/lib/vagrant-triggers/dsl.rb
           # @logger...
           # error...
-          puts `#{cmds}`.split(/\n+/).select do |l|
-              l =~ /opcode: UPDATE|(IN|ANY)\s+(?!(SOA|NS))[A-Z]+|could not/
-            end
-          end
+          puts `#{cmds}`.split(/\n+/).select { |l| l =~ /opcode: UPDATE|(IN|ANY)\s+(?!(SOA|NS))[A-Z]+|could not/ }
         end
       end
     end
@@ -179,7 +176,7 @@ class << VAGRANTFILE
 
     def get(namespace = nil, autoload: true)
       if namespace
-        load namespace if autoload && !defined? @config[namespace] # < FIXME? Does this do what we want?
+        load namespace if autoload && !defined? @config[namespace]
         return @config[namespace]
       end
       load if autoload && @config.instance_variables.empty?
