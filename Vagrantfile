@@ -1,5 +1,4 @@
 #!/usr/bin/env ruby
-# -*- mode: ruby -*-
 # vi: set ft=ruby :
 =begin
   The MIT License (MIT)
