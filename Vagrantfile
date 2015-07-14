@@ -34,7 +34,7 @@ class Object
   #
   # Returns self if self is boolean true or false,
   # otherwise the (optional) default is returned
-  def filter_boolean_value(default=false)
+  def filter_boolean_value(default = false)
     [true, false].include?(self) ? self : default
   end
 
