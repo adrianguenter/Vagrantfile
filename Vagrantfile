@@ -43,11 +43,11 @@ class Object
   def deep_symbolize_keys
     return self.reduce({}) do |memo, (k, v)|
       memo.tap { |m| m[k.to_sym] = v.deep_symbolize_keys }
-    end if self.is_a? Hash
+    end if self.is_a?(Hash)
 
     return self.reduce([]) do |memo, v|
       memo << v.deep_symbolize_keys; memo
-    end if self.is_a? Array
+    end if self.is_a?(Array)
 
     self
   end
@@ -72,33 +72,33 @@ class << VAGRANTFILE
 
     unless Object.const_defined?('Vagrant')
       # TODO command-line stuff here
-      puts '—— CLI ——'
-      cli = CommandLineHelper.new
+      puts '—— CLI is not implemented (yet!), sorry! ——'
+      #cli = CommandLineHelper.new
       exit
     end
 
     @instance_id = "#{@config.ENV[:name]}-#{SecureRandom.hex(3)}"
 
-    Vagrant.require_version VAGRANT_VERSION
+    Vagrant.require_version(VAGRANT_VERSION)
     # TODO Merge in user definable (options.yaml?) plugins here?
     REQUIRED_PLUGINS.each do |plugin|
       abort("Missing plugin, please run: "\
-          "vagrant plugin install #{plugin}") unless Vagrant.has_plugin? plugin
+          "vagrant plugin install #{plugin}") unless Vagrant.has_plugin?(plugin)
     end
     ENV['VAGRANT_DEFAULT_PROVIDER'] ||= 'docker'
 
     Vagrant.configure(API_VERSION) do |config|
-      # Turn off shared folders
-      config.vm.synced_folder ".", "/vagrant", id: "vagrant-root", disabled: true
+      # Disable the default ´/current/directory  »  /vagrant´ synced folder
+      config.vm.synced_folder(".", "/vagrant", id: "vagrant-root", disabled: true)
 
       # Box
       @config.ENV[:boxes].each do |bname, bcfg|
-        config.vm.define bname, primary: bcfg[:is_primary] do |b|
+        config.vm.define(bname, primary: bcfg[:is_primary]) do |b|
           # TODO? Provisioners
 
           # Providers (first in config is default)
           bcfg[:providers].each do |pname, pcfg|
-            b.vm.provider pname do |p|
+            b.vm.provider(pname) do |p|
               case pname
                 when :docker
                   p.name            = pcfg[:name] ||= "#{bname}.#{@instance_id}"
@@ -115,6 +115,7 @@ class << VAGRANTFILE
 
               # Overwrite the box_config hash with the
               # Vagrant provider's instance vars
+              # TODO Create a separate hash for this
               p.instance_variables.each do |var|
                 # Chop off @ from beginning of var
                 pcfg[var[1..-1].to_sym] = p.instance_variable_get(var)
@@ -129,6 +130,8 @@ class << VAGRANTFILE
         end
       end
 
+      # TODO Trigger after :halt, :destroy to automatically remove the DNS A records
+
       config.trigger.after [:up, :reload] do
         vfconfig  = VAGRANTFILE.config
         nsupdate  = vfconfig.LOCAL[:nsupdate]
@@ -141,7 +144,7 @@ class << VAGRANTFILE
                 "echo 'update add #{domain}. 3600 IN A #{public_ip}';"
           end; cmds << "echo 'send' ) | nsupdate -D -k '#{nsupdate[:keyfile_path]}' 2>&1"
 
-          # TODO: Error handling
+          # TODO Error handling
           # https://github.com/emyl/vagrant-triggers/blob/master/lib/vagrant-triggers/dsl.rb
           # @logger...
           # error...
@@ -176,10 +179,10 @@ class << VAGRANTFILE
 
     def get(namespace = nil, autoload: true)
       if namespace
-        load namespace if autoload && !defined? @config[namespace]
+        load(namespace) if autoload and !defined? @config[namespace]
         return @config[namespace]
       end
-      load if autoload && @config.instance_variables.empty?
+      load if autoload and @config.instance_variables.empty?
       @config
     end
 
@@ -193,12 +196,12 @@ class << VAGRANTFILE
         return file_data
       end
 
-      @files.each_key { |key| load key }
+      @files.each_key { |key| load(key) }
       @config
     end
 
     def _load_file(path)
-      OpenStruct.new YAML.load_file(path).deep_symbolize_keys
+      OpenStruct.new(YAML.load_file(path).deep_symbolize_keys)
     end
 
     private :_load_file
