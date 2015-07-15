@@ -68,6 +68,8 @@ class << VAGRANTFILE
   attr_reader :configHelper, :config, :instance_id
 
   def do
+    @instance_id = SecureRandom.hex(3)
+
     _load_config
 
     unless Object.const_defined?('Vagrant')
@@ -76,8 +78,6 @@ class << VAGRANTFILE
       #cli = CommandLineHelper.new
       exit
     end
-
-    @instance_id = "#{@config.ENV[:name]}-#{SecureRandom.hex(3)}"
 
     Vagrant.require_version(VAGRANT_VERSION)
     # TODO Merge in user definable (options.yaml?) plugins here?
@@ -101,7 +101,7 @@ class << VAGRANTFILE
             b.vm.provider(pname) do |p|
               case pname
                 when :docker
-                  p.name            = pcfg[:name] ||= "#{bname}.#{@instance_id}"
+                  p.name            = pcfg[:name] ||= "#{bname}.#{@config.ENV[:name]}-#{@instance_id}"
                   p.image           = pcfg[:image]
                   p.build_dir       = pcfg[:build_dir]
                   p.build_args      = pcfg[:build_args] ||= []
