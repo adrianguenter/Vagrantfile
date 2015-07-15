@@ -62,9 +62,10 @@ class << VAGRANTFILE
   DATA_PATH        = ENV['VFD_PATH'] ||= "#{__dir__}/Vagrantfile.d"
   REQUIRED_PLUGINS = %w(vagrant-triggers vagrant-guestip)
 
+  @configHelper
   @config
   @instance_id
-  attr_reader :config, :instance_id
+  attr_reader :configHelper, :config, :instance_id
 
   def do
     _load_config
@@ -101,10 +102,10 @@ class << VAGRANTFILE
               case pname
                 when :docker
                   p.name            = pcfg[:name] ||= "#{bname}.#{@instance_id}"
-                  p.image           = pcfg[:'.image']
+                  p.image           = pcfg[:image]
                   p.build_dir       = pcfg[:build_dir]
                   p.build_args      = pcfg[:build_args] ||= []
-                  p.create_args     = pcfg[:create_args] ||= ["-h", "#{p.name}"]
+                  p.create_args     = pcfg[:create_args] ||= []
                   p.remains_running = pcfg[:remains_running].filter_boolean_value(true)
                 # TODO? passthrough remaining pairs, mapping p.[key] > value
                 else
@@ -154,56 +155,111 @@ class << VAGRANTFILE
   end
 
   def _load_config
-    @config = ConfigHelper.new(
+    @configHelper = ConfigHelper.new(
         {
             :OPTIONS => "#{DATA_PATH}/config/options.yaml",
             :ENV     => "#{DATA_PATH}/config/env.yaml",
             :LOCAL   => "#{DATA_PATH}/config/local.yaml"
         }
     ).load
+
+    @config = @configHelper.config
+
+    @configHelper.expansion_map = {
+        :pwd         => __dir__,
+        :instance_id => @instance_id,
+        :name        => @config.ENV[:name]
+    }
+    @configHelper.expand_vars
   end
 
   private :_load_config
 
   class ConfigHelper
     class Config < Object
+      def has?(namespace)
+        instance_variable_defined?('@'+_filter_ns(namespace))
+      end
+
+      def empty?
+        instance_variables.empty?
+      end
+
+      def get(namespace = nil)
+        if namespace
+          return instance_variable_get('@'+_filter_ns(namespace))
+        end
+        instance_variables
+      end
+
+      def set(namespace, value)
+        unless has?(namespace)
+          self.class.class_eval { attr_reader namespace.to_sym }
+        end
+        instance_variable_set('@'+_filter_ns(namespace), value)
+      end
+
+      def _filter_ns(namespace)
+        namespace.to_s.gsub(/[\W_]+/, '');
+      end
+
+      private :_filter_ns
     end
 
-    def initialize(files)
-      @files  = files
-      @config = Config.new
+    def initialize(files, expansion_map: {})
+      @files         = files
+      @expansion_map = expansion_map
+      @config        = Config.new
     end
 
-    attr_accessor :files
+    attr_accessor :files, :expansion_map
+    attr_reader :config
 
     def get(namespace = nil, autoload: true)
       if namespace
-        load(namespace) if autoload and !defined? @config[namespace]
-        return @config[namespace]
+        load(namespace) if autoload and !@config.has?(namespace)
+        return @config.get(namespace)
       end
-      load if autoload and @config.instance_variables.empty?
+      load if autoload and @config.empty?
       @config
     end
 
-    def load(namespace = nil)
+    def load(namespace = nil, expand: true)
       if namespace
-        unless @config.instance_variable_defined?("@#{namespace}")
-          @config.class.class_eval { attr_reader namespace.to_sym }
-        end
-        file_data = _load_file(@files[namespace])
-        @config.instance_variable_set("@#{namespace}", file_data)
-        return file_data
+        # Parse file and expand variables
+        @config.set(namespace, _load_file(@files[namespace]))
+        expand_vars(namespace) if expand and not expansion_map.empty?
+        return
       end
-
       @files.each_key { |key| load(key) }
-      @config
+      self
+    end
+
+    def expand_vars(namespace = nil)
+      if namespace
+        _expand(@config.get(namespace), expansion_map)
+        return
+      end
+      @config.get.each { |var| expand_vars(var) }
+    end
+
+    def _expand(obj, expansions)
+      case obj
+        when String then
+          obj.replace(obj % expansions)
+        when OpenStruct then
+          obj.instance_variables.each { |v| _expand(obj.instance_variable_get(v), expansions) }
+        when Hash, Array then
+          obj.each { |v| _expand(v, expansions) }
+      end
+      #puts "«#{obj.class}» #{obj.inspect}\n\n"
     end
 
     def _load_file(path)
       OpenStruct.new(YAML.load_file(path).deep_symbolize_keys)
     end
 
-    private :_load_file
+    private :_expand, :_load_file
   end
 
   class CommandLineHelper
